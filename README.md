@@ -1,2 +1,2 @@
 # obsidian-immersive-translator
-immersive translator plugin for obsidian
+test immersive translator plugin for obsidian
