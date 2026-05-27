@@ -1,0 +1,31 @@
+{
+  "name": "obsidian-immersive-translator",
+  "version": "0.1.0",
+  "description": "Translate selections, documents, and sidebar text in Obsidian using local Claude CLI.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "typecheck": "tsc --noEmit --skipLibCheck",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "translation",
+    "claude-code"
+  ],
+  "author": "yuan-yilin",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.112"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.0",
+    "builtin-modules": "^5.0.0",
+    "esbuild": "^0.28.0",
+    "obsidian": "latest",
+    "typescript": "^6.0.0",
+    "vitest": "^4.1.7"
+  }
+}

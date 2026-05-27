@@ -1,0 +1,138 @@
+.translator-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.translator-sidebar-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.translator-sidebar-title {
+  font-weight: 700;
+  font-size: 1.05em;
+}
+
+.translator-sidebar-scroll {
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.translator-lang-row {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.translator-lang-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-ui-small);
+}
+
+.translator-lang-select,
+.translator-input {
+  width: 100%;
+}
+
+.translator-input {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.translator-input-section,
+.translator-output-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.translator-section-label {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.translator-btn-row,
+.translator-output-header,
+.translator-modal-buttons,
+.translator-fdl-buttons,
+.translator-progress-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.translator-translate-btn {
+  flex: 1;
+}
+
+.translator-output {
+  min-height: 120px;
+  padding: 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.translator-error {
+  color: var(--text-error);
+}
+
+.translator-modal,
+.translator-fdl-modal,
+.translator-progress-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.translator-modal-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 1.1em;
+}
+
+.translator-modal-lang,
+.translator-progress-text {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.translator-modal-section-label {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.translator-modal-text {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  white-space: pre-wrap;
+}
+
+.translator-modal-translated {
+  background: var(--background-primary-alt);
+}
+
+.translator-fdl-warning {
+  color: var(--text-warning);
+}
+
+.translator-hover-tooltip {
+  max-width: 420px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+}

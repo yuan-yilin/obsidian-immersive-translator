@@ -1,0 +1,11 @@
+{
+  "id": "obsidian-immersive-translator",
+  "name": "Immersive Translator",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Translate selections, documents, and sidebar text in Obsidian using local Claude CLI.",
+  "author": "yuan-yilin",
+  "authorUrl": "",
+  "fundingUrl": "",
+  "isDesktopOnly": true
+}
