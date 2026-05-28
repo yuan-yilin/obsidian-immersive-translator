@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.8
+
+### Features
+- 全文翻译后自动校验 Markdown 格式结构（标题、代码块、表格、引用、YAML frontmatter 等），发现不一致时尝试自动修复并提示用户
+
+## 1.0.7
+
+### Fixes
+- 阅读模式悬停翻译修复：`selectionchange` 事件在 `mouseup` 后可能检测到选区短暂收起，导致译文到达前 tooltip 被移除。现在翻译进行中不自动隐藏，仅在翻译完成后再响应选区变化。
+- 阅读模式悬停翻译修复：leaf 类型检测从仅 `"markdown"` 改为同时搜索 `"markdown"`（编辑模式）和 `"preview"`（阅读模式），确保阅读模式下能正确定位 DOM 容器
+
 ## 1.0.6
 
 ### Fixes

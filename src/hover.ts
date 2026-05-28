@@ -199,21 +199,21 @@ export function registerReadingHoverTranslation(plugin: ImmersiveTranslatorPlugi
 
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-      hideTooltip();
+      // Only hide if we're not in the middle of a translation — the user
+      // may have briefly released the mouse button while the selection
+      // momentarily collapsed, but they'll still be looking at the tooltip.
+      if (!currentAbort) hideTooltip();
       return;
     }
 
     const selectedText = sel.toString().trim();
     if (selectedText.length < 2 || selectedText.length > plugin.settings.hoverMaxChars) {
-      hideTooltip();
+      if (!currentAbort) hideTooltip();
       return;
     }
 
-    const activeLeaves = plugin.app.workspace.getLeavesOfType("markdown");
-    if (activeLeaves.length === 0) return;
-
-    const activeLeaf = activeLeaves[0];
-    const viewDom = (activeLeaf.view as any).containerEl;
+    // Verify selection is inside any markdown/preview leaf container
+    const viewDom = findActiveMarkdownViewDom();
     if (!viewDom) return;
 
     const range = sel.getRangeAt(0);
@@ -244,8 +244,29 @@ export function registerReadingHoverTranslation(plugin: ImmersiveTranslatorPlugi
           if (!abortController.signal.aborted && currentTooltip) {
             currentTooltip.textContent = error instanceof Error ? error.message : String(error);
           }
+        })
+        .finally(() => {
+          if (currentAbort === abortController) {
+            currentAbort = null;
+          }
         });
     }, plugin.settings.hoverDelay);
+  }
+
+  /**
+   * Search for a markdown or preview leaf's container element.
+   * "markdown" = source/live-preview mode (CodeMirror),
+   * "preview" = reading mode (rendered HTML).
+   */
+  function findActiveMarkdownViewDom(): HTMLElement | null {
+    for (const viewType of ["markdown", "preview"]) {
+      const leaves = plugin.app.workspace.getLeavesOfType(viewType);
+      for (const leaf of leaves) {
+        const container = (leaf.view as any).containerEl;
+        if (container) return container;
+      }
+    }
+    return null;
   }
 
   plugin.registerDomEvent(window, "mouseup", handleSelection);

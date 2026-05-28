@@ -2,6 +2,7 @@ import { App, Editor, MarkdownView, Modal, Notice, TFile } from "obsidian";
 import type ImmersiveTranslatorPlugin from "../main";
 import { getLanguageName } from "./translation/languages";
 import { translateText } from "./translation/translator";
+import { validateAndRepair } from "./translation/markdown-validator";
 
 export async function translateSelection(plugin: ImmersiveTranslatorPlugin, editor: Editor): Promise<void> {
   const selection = editor.getSelection();
@@ -85,14 +86,22 @@ async function translateFullDocReplace(
   try {
     const result = await translateFullContent(plugin, target.content, abortController, progress);
 
+    // Validate markdown structure and attempt repair
+    const { repaired, hadIssues, issues } = validateAndRepair(target.content, result);
+    const finalText = repaired;
+
     if (target.kind === "editor" && target.editor) {
-      target.editor.setValue(result);
+      target.editor.setValue(finalText);
     } else if (target.file) {
-      await plugin.app.vault.modify(target.file, result);
+      await plugin.app.vault.modify(target.file, finalText);
     }
 
     progress.close();
-    new Notice("全文翻译完成");
+    if (hadIssues) {
+      new Notice(`翻译完成，但发现 ${issues.length} 个格式问题，已尝试修复`);
+    } else {
+      new Notice("全文翻译完成");
+    }
   } catch (error) {
     progress.close();
     new Notice(`翻译失败: ${error instanceof Error ? error.message : String(error)}`, 6000);
@@ -109,9 +118,19 @@ async function translateFullDocNewFile(
 
   try {
     const result = await translateFullContent(plugin, target.content, abortController, progress);
-    const finalPath = await createTranslatedFile(plugin, target.file, result);
+
+    // Validate markdown structure and attempt repair
+    const { repaired, hadIssues } = validateAndRepair(target.content, result);
+    const finalText = repaired;
+
+    const finalPath = await createTranslatedFile(plugin, target.file, finalText);
     progress.close();
-    new Notice(`翻译完成，已保存为: ${finalPath.split("/").pop()}`);
+
+    if (hadIssues) {
+      new Notice(`翻译完成，已保存为: ${finalPath.split("/").pop()}（格式已自动修复）`);
+    } else {
+      new Notice(`翻译完成，已保存为: ${finalPath.split("/").pop()}`);
+    }
 
     const newFile = plugin.app.vault.getAbstractFileByPath(finalPath);
     if (newFile instanceof TFile) {
