@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.8
+## 1.0.9
 
 ### Features
 - 全文翻译后自动校验 Markdown 格式结构（标题、代码块、表格、引用、YAML frontmatter 等），发现不一致时尝试自动修复并提示用户
