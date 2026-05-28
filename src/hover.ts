@@ -26,7 +26,7 @@ export function createHoverTranslationExtension(plugin: ImmersiveTranslatorPlugi
 
         if (selectedText === cachedText && cachedTranslation) {
           dom.textContent = cachedTranslation;
-          return { dom };
+          return { dom, destroy: createDestroy(null, dom) };
         }
 
         activeAbortController?.abort();
@@ -50,14 +50,42 @@ export function createHoverTranslationExtension(plugin: ImmersiveTranslatorPlugi
 
         return {
           dom,
-          destroy() {
-            abortController.abort();
-            if (activeAbortController === abortController) {
-              activeAbortController = null;
-            }
-          },
+          destroy: createDestroy(abortController, dom),
         };
       },
     };
   }, { hoverTime: plugin.settings.hoverDelay });
+}
+
+/**
+ * Return a destroy function that keeps the tooltip alive while the mouse
+ * hovers over the tooltip element itself.  The tooltip only closes once
+ * the mouse has left both the selection AND the tooltip DOM.
+ */
+function createDestroy(
+  abortController: AbortController | null,
+  dom: HTMLElement,
+): () => void {
+  let mouseInTooltip = false;
+  let pending = false;
+
+  dom.addEventListener("mouseenter", () => {
+    mouseInTooltip = true;
+  });
+
+  dom.addEventListener("mouseleave", () => {
+    mouseInTooltip = false;
+    if (pending) {
+      dom.remove();
+    }
+  });
+
+  return () => {
+    abortController?.abort();
+    if (mouseInTooltip) {
+      pending = true;
+      return;
+    }
+    dom.remove();
+  };
 }
