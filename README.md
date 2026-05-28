@@ -23,7 +23,7 @@ npm install
 npm run build
 ```
 
-The build emits `main.js`. Install `main.js`, `manifest.json`, and `styles.css` into your vault's `.obsidian/plugins/obsidian-immersive-translator/` directory.
+The build emits `main.js`. Install `main.js`, `manifest.json`, and `styles.css` into your vault's `.obsidian/plugins/immersive-translator/` directory.
 
 ## Usage
 

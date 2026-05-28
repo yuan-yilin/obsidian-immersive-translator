@@ -1,8 +1,7 @@
-import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import { query as agentQuery } from "@anthropic-ai/claude-agent-sdk";
+import { spawn } from "child_process";
 import { getEnhancedPath, getMissingNodeError } from "../utils/env";
 import type { TranslateOptions, TranslatorConfig } from "../translation/translator";
-import { createCustomSpawnFunction } from "./customSpawn";
+import { buildClaudeCommand } from "./customSpawn";
 
 export async function runClaudeTranslation(
   config: TranslatorConfig & { claudePath: string; vaultPath: string },
@@ -10,13 +9,8 @@ export async function runClaudeTranslation(
   systemPrompt: string,
   options: TranslateOptions = {},
 ): Promise<string> {
-  const abortController = new AbortController();
-  if (options.signal) {
-    if (options.signal.aborted) {
-      abortController.abort();
-    } else {
-      options.signal.addEventListener("abort", () => abortController.abort(), { once: true });
-    }
+  if (options.signal?.aborted) {
+    throw new Error("翻译已取消");
   }
 
   const enhancedPath = getEnhancedPath(process.env.PATH, config.claudePath);
@@ -25,71 +19,82 @@ export async function runClaudeTranslation(
     throw new Error(missingNodeError);
   }
 
-  const sdkOptions: Options = {
-    cwd: config.vaultPath,
-    systemPrompt,
-    model: config.model || undefined,
-    abortController,
-    pathToClaudeCodeExecutable: config.claudePath,
-    env: {
-      ...process.env,
-      PATH: enhancedPath,
-    },
-    permissionMode: "bypassPermissions",
-    allowDangerouslySkipPermissions: true,
-    includePartialMessages: true,
-    spawnClaudeCodeProcess: createCustomSpawnFunction(enhancedPath),
-  };
+  const { command, args } = buildClaudeCommand(config.claudePath, enhancedPath, systemPrompt, config.model);
 
-  const response = agentQuery({ prompt, options: sdkOptions });
-  let responseText = "";
+  return new Promise((resolve, reject) => {
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
 
-  try {
-    for await (const message of response) {
-      if (abortController.signal.aborted) {
-        await response.interrupt();
-        throw new Error("翻译已取消");
+    const child = spawn(command, args, {
+      cwd: config.vaultPath,
+      env: {
+        ...process.env,
+        PATH: enhancedPath,
+      },
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
+
+    const cleanup = () => {
+      options.signal?.removeEventListener("abort", abort);
+    };
+
+    const rejectOnce = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    const abort = () => {
+      child.kill();
+      rejectOnce(new Error("翻译已取消"));
+    };
+
+    options.signal?.addEventListener("abort", abort, { once: true });
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+      options.onAccumulatedText?.(stdout);
+    });
+
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+
+    child.on("error", (error) => {
+      rejectOnce(error instanceof Error ? error : new Error(String(error)));
+    });
+
+    child.on("close", (code, signal) => {
+      if (settled) return;
+      cleanup();
+
+      if (code !== 0) {
+        rejectOnce(new Error(buildClaudeCliError(code, signal, stderr)));
+        return;
       }
 
-      const text = extractAssistantText(message as AssistantMessageLike);
-      if (text) {
-        responseText += text;
-        options.onAccumulatedText?.(responseText);
+      const trimmed = stdout.trim();
+      if (!trimmed) {
+        rejectOnce(new Error("Claude CLI returned an empty translation."));
+        return;
       }
-    }
-  } catch (error) {
-    if (abortController.signal.aborted) {
-      throw new Error("翻译已取消");
-    }
-    throw error;
-  }
 
-  const trimmed = responseText.trim();
-  if (!trimmed) {
-    throw new Error("Claude CLI returned an empty translation.");
-  }
-  return trimmed;
+      settled = true;
+      resolve(trimmed);
+    });
+
+    child.stdin?.end(prompt);
+  });
 }
 
-interface AssistantMessageLike {
-  type: string;
-  message?: {
-    content?: unknown;
-  };
-}
-
-function extractAssistantText(message: AssistantMessageLike): string {
-  const content = message.message?.content;
-  if (message.type !== "assistant" || !Array.isArray(content)) {
-    return "";
+function buildClaudeCliError(code: number | null, signal: NodeJS.Signals | null, stderr: string): string {
+  const detail = stderr.trim();
+  const suffix = detail ? `\n\n${detail}` : "";
+  if (signal) {
+    return `Claude CLI was terminated by ${signal}.${suffix}`;
   }
-
-  return content
-    .filter((block): block is { type: "text"; text: string } => {
-      if (!block || typeof block !== "object" || Array.isArray(block)) return false;
-      const record = block as Record<string, unknown>;
-      return record.type === "text" && typeof record.text === "string";
-    })
-    .map((block) => block.text)
-    .join("");
+  return `Claude CLI exited with code ${code ?? "unknown"}.${suffix}`;
 }
