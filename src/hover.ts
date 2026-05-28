@@ -100,12 +100,15 @@ export function registerReadingHoverTranslation(plugin: ImmersiveTranslatorPlugi
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let cachedText = "";
   let cachedTranslation = "";
+  let currentUntrack: (() => void) | null = null;
 
   function cleanupTooltip(): void {
     currentAbort?.abort();
     currentTooltip?.remove();
+    currentUntrack?.();
     currentTooltip = null;
     currentAbort = null;
+    currentUntrack = null;
   }
 
   function hideTooltip(): void {
@@ -140,40 +143,51 @@ export function registerReadingHoverTranslation(plugin: ImmersiveTranslatorPlugi
     document.body.appendChild(dom);
     currentTooltip = dom;
 
-    // The tooltip only closes when the mouse has left BOTH the tooltip
-    // and the selected text area.  We track both regions independently.
+    // The tooltip only closes when:
+    // 1. The mouse has left BOTH the tooltip and the selected area, AND
+    // 2. The user clicks outside those areas.
     let mouseInTooltip = false;
-    let mouseInSelection = false;
+    let mouseWasOutside = false;
 
-    dom.addEventListener("mouseenter", () => { mouseInTooltip = true; });
-    dom.addEventListener("mouseleave", () => {
-      mouseInTooltip = false;
-      tryRemove(dom);
-    });
-
-    // Attach a temporary mousemove listener to the document so we know
-    // whether the cursor is currently inside the selection rect.
-    const trackSelection = (e: MouseEvent) => {
-      mouseInSelection = isInsideRect(e, rect);
-    };
-    plugin.registerDomEvent(document, "mousemove", trackSelection);
-
-    // Try removing once the 60s timeout fires.
-    const autoHideId = setTimeout(() => tryRemove(dom), 60_000);
+    dom.addEventListener("mouseenter", () => { mouseInTooltip = false; mouseWasOutside = false; });
+    dom.addEventListener("mouseleave", () => { mouseInTooltip = true; });
 
     /**
-     * Remove the tooltip only when the mouse is outside BOTH regions.
+     * Track whether the mouse is currently outside both the tooltip and
+     * the selection rect.  We set mouseWasOutside only when the cursor
+     * has left both regions.
      */
-    function tryRemove(domRef: HTMLElement): void {
-      if (currentTooltip !== domRef) return;
-      if (mouseInTooltip || mouseInSelection) return;
-      removeTooltip(domRef);
-    }
+    const trackHover = (e: MouseEvent) => {
+      const inSel = isInsideRect(e, rect);
+      if (!inSel && mouseInTooltip) {
+        mouseWasOutside = true;
+      } else {
+        mouseWasOutside = false;
+      }
+    };
+    const untrack = () => document.removeEventListener("mousemove", trackHover);
+    document.addEventListener("mousemove", trackHover);
+    currentUntrack = untrack;
 
-    function removeTooltip(domRef: HTMLElement): void {
-      clearTimeout(autoHideId);
-      domRef.remove();
-      if (currentTooltip === domRef) {
+    /**
+     * When the mouse is outside both regions, a click anywhere dismisses
+     * the tooltip.  If the click lands inside the tooltip or the selection,
+     * the tooltip stays.
+     */
+    const dismissOnOutsideClick = (e: MouseEvent) => {
+      if (!mouseWasOutside) return;
+      if (currentTooltip !== dom) return;
+      if (isInsideRect(e, rect)) return;
+      if (dom.contains(e.target as Node)) return;
+      removeTooltip();
+    };
+    plugin.registerDomEvent(document, "mousedown", dismissOnOutsideClick);
+
+    function removeTooltip(): void {
+      untrack();
+      currentUntrack = null;
+      dom.remove();
+      if (currentTooltip === dom) {
         currentTooltip = null;
         currentAbort = null;
       }
