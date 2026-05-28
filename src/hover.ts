@@ -140,23 +140,44 @@ export function registerReadingHoverTranslation(plugin: ImmersiveTranslatorPlugi
     document.body.appendChild(dom);
     currentTooltip = dom;
 
+    // The tooltip only closes when the mouse has left BOTH the tooltip
+    // and the selected text area.  We track both regions independently.
     let mouseInTooltip = false;
+    let mouseInSelection = false;
+
     dom.addEventListener("mouseenter", () => { mouseInTooltip = true; });
     dom.addEventListener("mouseleave", () => {
       mouseInTooltip = false;
-      dom.remove();
-      currentTooltip = null;
+      tryRemove(dom);
     });
 
-    // Auto-hide after 60s only if mouse is NOT hovering over the tooltip.
-    // Claude CLI cold-start can take 20-40s, so a short timeout would remove
-    // the tooltip before the translation ever arrives.
-    setTimeout(() => {
-      if (!mouseInTooltip && currentTooltip === dom) {
-        dom.remove();
+    // Attach a temporary mousemove listener to the document so we know
+    // whether the cursor is currently inside the selection rect.
+    const trackSelection = (e: MouseEvent) => {
+      mouseInSelection = isInsideRect(e, rect);
+    };
+    plugin.registerDomEvent(document, "mousemove", trackSelection);
+
+    // Try removing once the 60s timeout fires.
+    const autoHideId = setTimeout(() => tryRemove(dom), 60_000);
+
+    /**
+     * Remove the tooltip only when the mouse is outside BOTH regions.
+     */
+    function tryRemove(domRef: HTMLElement): void {
+      if (currentTooltip !== domRef) return;
+      if (mouseInTooltip || mouseInSelection) return;
+      removeTooltip(domRef);
+    }
+
+    function removeTooltip(domRef: HTMLElement): void {
+      clearTimeout(autoHideId);
+      domRef.remove();
+      if (currentTooltip === domRef) {
         currentTooltip = null;
+        currentAbort = null;
       }
-    }, 60_000);
+    }
   }
 
   function handleSelection(): void {
@@ -221,4 +242,16 @@ export function registerReadingHoverTranslation(plugin: ImmersiveTranslatorPlugi
       cleanupTooltip();
     }
   });
+}
+
+/**
+ * Check whether a mouse event falls inside a DOM rect.
+ */
+function isInsideRect(e: MouseEvent, rect: DOMRect): boolean {
+  return (
+    e.clientX >= rect.left &&
+    e.clientX <= rect.right &&
+    e.clientY >= rect.top &&
+    e.clientY <= rect.bottom
+  );
 }
