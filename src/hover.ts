@@ -148,12 +148,15 @@ export function registerReadingHoverTranslation(plugin: ImmersiveTranslatorPlugi
       currentTooltip = null;
     });
 
+    // Auto-hide after 60s only if mouse is NOT hovering over the tooltip.
+    // Claude CLI cold-start can take 20-40s, so a short timeout would remove
+    // the tooltip before the translation ever arrives.
     setTimeout(() => {
       if (!mouseInTooltip && currentTooltip === dom) {
         dom.remove();
         currentTooltip = null;
       }
-    }, 8000);
+    }, 60_000);
   }
 
   function handleSelection(): void {

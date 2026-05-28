@@ -1,7 +1,6 @@
 import { App, Editor, MarkdownView, Modal, Notice, TFile } from "obsidian";
 import type ImmersiveTranslatorPlugin from "../main";
 import { getLanguageName } from "./translation/languages";
-import { splitTextIntoChunks } from "./translation/chunking";
 import { translateText } from "./translation/translator";
 
 export async function translateSelection(plugin: ImmersiveTranslatorPlugin, editor: Editor): Promise<void> {
@@ -131,21 +130,12 @@ async function translateFullContent(
   progress: TranslationProgressModal,
 ): Promise<string> {
   const config = plugin.getTranslatorConfig();
-  const chunks = splitTextIntoChunks(content, config.chunkSize);
-  const translated: string[] = [];
-
-  progress.update(0, chunks.length);
-  for (let i = 0; i < chunks.length; i++) {
-    if (abortController.signal.aborted) {
-      throw new Error("翻译已取消");
-    }
-
-    const result = await translateText(config, chunks[i], { signal: abortController.signal });
-    translated.push(result);
-    progress.update(i + 1, chunks.length);
-  }
-
-  return translated.join("");
+  // Use translateText directly — it handles internal chunking while preserving
+  // markdown structure across chunk boundaries.
+  progress.update(0, 1);
+  const result = await translateText(config, content, { signal: abortController.signal });
+  progress.update(1, 1);
+  return result;
 }
 
 async function createTranslatedFile(
