@@ -28,3 +28,40 @@ export function buildChunkTranslationPrompt(text: string, index: number, total: 
 
   return `Translate part ${index + 1} of ${total}. Return only this part's translated result and do not summarize neighboring parts.\n\n${text}`;
 }
+
+export function buildValidationSystemPrompt(): string {
+  return `You are a Markdown format validator. You will receive two documents: the ORIGINAL Markdown file and its TRANSLATED version. Your job is to ensure the translated version preserves the exact structural layout of the original.
+
+Compare these structural elements between original and translated:
+1. **Headings**: same count, same levels (H1-H6), same hierarchical order
+2. **Code fences**: same count, same language identifiers, all fences properly closed
+3. **YAML frontmatter**: present or absent in both, keys preserved
+4. **Tables**: same number of columns and rows, separator lines intact
+5. **List structures**: same nesting levels, same bullet/numbering style
+6. **Blockquotes**: same nesting depth
+7. **Horizontal rules**: same count
+8. **Links and images**: same count and anchor/image syntax preserved
+9. **Bold/italic markers**: consistent emphasis style
+10. **Task list markers**: checkboxes preserved
+
+Rules:
+- If the structures match perfectly, return the translated text unchanged.
+- If there are structural differences, fix the translated text to match the original structure while keeping all translated content intact.
+- Output ONLY the final corrected translated text. No explanations, no notes.`;
+}
+
+export function buildValidationPrompt(original: string, translated: string): string {
+  return `Validate and fix the markdown structure.
+
+ORIGINAL:
+\`\`\`markdown
+${original}
+\`\`\`
+
+TRANSLATED:
+\`\`\`markdown
+${translated}
+\`\`\`
+
+Compare the structures. If they differ, fix the TRANSLATED version to match ORIGINAL structure. Return ONLY the corrected translated text.`;
+}

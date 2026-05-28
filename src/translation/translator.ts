@@ -1,5 +1,5 @@
 import { runClaudeTranslation } from "../claude/claudeTranslate";
-import { buildChunkTranslationPrompt, buildTranslationPrompt, buildTranslationSystemPrompt } from "./prompts";
+import { buildChunkTranslationPrompt, buildTranslationPrompt, buildTranslationSystemPrompt, buildValidationPrompt, buildValidationSystemPrompt } from "./prompts";
 import { splitTextIntoChunks } from "./chunking";
 
 export interface TranslatorConfig {
@@ -89,5 +89,32 @@ function ensureTranslatorConfig(config: TranslatorConfig): asserts config is Tra
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw new Error("翻译已取消");
+  }
+}
+
+/**
+ * Send original and translated text to Claude CLI for markdown structure
+ * validation and repair. Returns the corrected translation if Claude made
+ * changes, or the original translation if no structural issues were found.
+ */
+export async function validateMarkdownWithClaude(
+  config: TranslatorConfig,
+  original: string,
+  translated: string,
+  options: TranslateOptions = {},
+): Promise<string> {
+  if (!original.trim() || !translated.trim()) return translated;
+
+  try {
+    return await runClaudeTranslation(
+      config as TranslatorConfig & { claudePath: string; vaultPath: string },
+      buildValidationPrompt(original, translated),
+      buildValidationSystemPrompt(),
+      options,
+    );
+  } catch (error) {
+    // If validation fails, fall back to the unvalidated translation
+    console.warn("Markdown validation failed, using original translation:", error);
+    return translated;
   }
 }

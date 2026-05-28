@@ -1,8 +1,7 @@
 import { App, Editor, MarkdownView, Modal, Notice, TFile } from "obsidian";
 import type ImmersiveTranslatorPlugin from "../main";
 import { getLanguageName } from "./translation/languages";
-import { translateText } from "./translation/translator";
-import { validateAndRepair } from "./translation/markdown-validator";
+import { translateText, validateMarkdownWithClaude } from "./translation/translator";
 
 export async function translateSelection(plugin: ImmersiveTranslatorPlugin, editor: Editor): Promise<void> {
   const selection = editor.getSelection();
@@ -86,9 +85,11 @@ async function translateFullDocReplace(
   try {
     const result = await translateFullContent(plugin, target.content, abortController, progress);
 
-    // Validate markdown structure and attempt repair
-    const { repaired, hadIssues, issues } = validateAndRepair(target.content, result);
-    const finalText = repaired;
+    // Validate markdown structure via Claude CLI and attempt repair
+    progress.setTitle("正在校验格式");
+    progress.update(0, 1, "正在校验 Markdown 结构...");
+    const finalText = await validateMarkdownWithClaude(plugin.getTranslatorConfig(), target.content, result, { signal: abortController.signal });
+    progress.update(1, 1, "校验完成");
 
     if (target.kind === "editor" && target.editor) {
       target.editor.setValue(finalText);
@@ -97,11 +98,7 @@ async function translateFullDocReplace(
     }
 
     progress.close();
-    if (hadIssues) {
-      new Notice(`翻译完成，但发现 ${issues.length} 个格式问题，已尝试修复`);
-    } else {
-      new Notice("全文翻译完成");
-    }
+    new Notice("全文翻译完成");
   } catch (error) {
     progress.close();
     new Notice(`翻译失败: ${error instanceof Error ? error.message : String(error)}`, 6000);
@@ -119,18 +116,15 @@ async function translateFullDocNewFile(
   try {
     const result = await translateFullContent(plugin, target.content, abortController, progress);
 
-    // Validate markdown structure and attempt repair
-    const { repaired, hadIssues } = validateAndRepair(target.content, result);
-    const finalText = repaired;
+    // Validate markdown structure via Claude CLI and attempt repair
+    progress.setTitle("正在校验格式");
+    progress.update(0, 1, "正在校验 Markdown 结构...");
+    const finalText = await validateMarkdownWithClaude(plugin.getTranslatorConfig(), target.content, result, { signal: abortController.signal });
+    progress.update(1, 1, "校验完成");
 
     const finalPath = await createTranslatedFile(plugin, target.file, finalText);
     progress.close();
-
-    if (hadIssues) {
-      new Notice(`翻译完成，已保存为: ${finalPath.split("/").pop()}（格式已自动修复）`);
-    } else {
-      new Notice(`翻译完成，已保存为: ${finalPath.split("/").pop()}`);
-    }
+    new Notice(`翻译完成，已保存为: ${finalPath.split("/").pop()}`);
 
     const newFile = plugin.app.vault.getAbstractFileByPath(finalPath);
     if (newFile instanceof TFile) {
@@ -282,7 +276,8 @@ class FullDocTranslateModal extends Modal {
 }
 
 class TranslationProgressModal extends Modal {
-  private statusEl!: HTMLDivElement;
+  private progressStatusEl!: HTMLDivElement;
+  private progressHeading!: HTMLHeadingElement;
 
   constructor(app: App, private abortController: AbortController) {
     super(app);
@@ -291,18 +286,24 @@ class TranslationProgressModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.addClass("translator-progress-modal");
-    contentEl.createEl("h2", { text: "正在翻译" });
-    this.statusEl = contentEl.createDiv({ cls: "translator-progress-text", text: "准备中..." });
+    this.progressHeading = contentEl.createEl("h2", { text: "正在翻译" });
+    this.progressStatusEl = contentEl.createDiv({ cls: "translator-progress-text", text: "准备中..." });
     const actionRow = contentEl.createDiv({ cls: "translator-progress-actions" });
     actionRow.createEl("button", { text: "停止" }).addEventListener("click", () => {
       this.abortController.abort();
-      this.statusEl.textContent = "正在停止...";
+      this.progressStatusEl.textContent = "正在停止...";
     });
   }
 
-  update(completed: number, total: number): void {
-    if (this.statusEl) {
-      this.statusEl.textContent = `进度: ${completed}/${total}`;
+  update(completed: number, total: number, message?: string): void {
+    if (this.progressStatusEl) {
+      this.progressStatusEl.textContent = message ?? `进度: ${completed}/${total}`;
+    }
+  }
+
+  updateHeading(text: string): void {
+    if (this.progressHeading) {
+      this.progressHeading.textContent = text;
     }
   }
 
