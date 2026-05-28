@@ -1,7 +1,7 @@
 import { MarkdownView, Plugin } from "obsidian";
 import { ClaudeCliResolver } from "./src/claude/ClaudeCliResolver";
 import { registerCommands, translateFullDocument, translateSelection } from "./src/commands";
-import { createHoverTranslationExtension } from "./src/hover";
+import { createHoverTranslationExtension, registerReadingHoverTranslation } from "./src/hover";
 import { TranslatorSettingTab, DEFAULT_SETTINGS, PluginSettings } from "./src/settings";
 import { SIDEBAR_VIEW_TYPE, TranslatorSidebarView } from "./src/sidebar";
 import { TranslatorConfig } from "./src/translation/translator";
@@ -24,6 +24,8 @@ export default class ImmersiveTranslatorPlugin extends Plugin {
     this.registerEditorExtension([
       createHoverTranslationExtension(this),
     ]);
+
+    registerReadingHoverTranslation(this);
 
     registerCommands(this);
 

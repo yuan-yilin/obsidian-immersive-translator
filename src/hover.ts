@@ -89,3 +89,133 @@ function createDestroy(
     dom.remove();
   };
 }
+
+/**
+ * Register DOM-level hover translation for Obsidian reading/preview mode.
+ * Uses window.getSelection() and a floating tooltip instead of CodeMirror.
+ */
+export function registerReadingHoverTranslation(plugin: ImmersiveTranslatorPlugin): void {
+  let currentAbort: AbortController | null = null;
+  let currentTooltip: HTMLElement | null = null;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let cachedText = "";
+  let cachedTranslation = "";
+
+  function cleanupTooltip(): void {
+    currentAbort?.abort();
+    currentTooltip?.remove();
+    currentTooltip = null;
+    currentAbort = null;
+  }
+
+  function hideTooltip(): void {
+    currentTooltip?.remove();
+    currentTooltip = null;
+  }
+
+  function showTooltip(text: string, rect: DOMRect): void {
+    cleanupTooltip();
+
+    const dom = document.createElement("div");
+    dom.className = "translator-reading-tooltip";
+    dom.textContent = text;
+
+    const viewWidth = window.innerWidth;
+    const viewHeight = window.innerHeight;
+    let left = rect.right;
+    let top = rect.bottom + 8;
+
+    if (left + 320 > viewWidth) {
+      left = Math.max(8, viewWidth - 330);
+    }
+    if (top + 100 > viewHeight) {
+      top = rect.top - 8;
+      dom.style.bottom = "100%";
+    }
+
+    dom.style.left = `${left}px`;
+    dom.style.top = `${top}px`;
+    dom.style.maxWidth = "320px";
+
+    document.body.appendChild(dom);
+    currentTooltip = dom;
+
+    let mouseInTooltip = false;
+    dom.addEventListener("mouseenter", () => { mouseInTooltip = true; });
+    dom.addEventListener("mouseleave", () => {
+      mouseInTooltip = false;
+      dom.remove();
+      currentTooltip = null;
+    });
+
+    setTimeout(() => {
+      if (!mouseInTooltip && currentTooltip === dom) {
+        dom.remove();
+        currentTooltip = null;
+      }
+    }, 8000);
+  }
+
+  function handleSelection(): void {
+    if (!plugin.settings.enableHover) return;
+
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+      hideTooltip();
+      return;
+    }
+
+    const selectedText = sel.toString().trim();
+    if (selectedText.length < 2 || selectedText.length > plugin.settings.hoverMaxChars) {
+      hideTooltip();
+      return;
+    }
+
+    const activeLeaves = plugin.app.workspace.getLeavesOfType("markdown");
+    if (activeLeaves.length === 0) return;
+
+    const activeLeaf = activeLeaves[0];
+    const viewDom = (activeLeaf.view as any).containerEl;
+    if (!viewDom) return;
+
+    const range = sel.getRangeAt(0);
+    if (!viewDom.contains(range.commonAncestorContainer)) return;
+
+    if (selectedText === cachedText && cachedTranslation) {
+      showTooltip(cachedTranslation, range.getBoundingClientRect());
+      return;
+    }
+
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      currentAbort?.abort();
+      const abortController = new AbortController();
+      currentAbort = abortController;
+
+      showTooltip("翻译中...", range.getBoundingClientRect());
+
+      translateText(plugin.getTranslatorConfig(), selectedText, { signal: abortController.signal })
+        .then((translation) => {
+          cachedText = selectedText;
+          cachedTranslation = translation;
+          if (!abortController.signal.aborted && currentTooltip) {
+            currentTooltip.textContent = translation;
+          }
+        })
+        .catch((error) => {
+          if (!abortController.signal.aborted && currentTooltip) {
+            currentTooltip.textContent = error instanceof Error ? error.message : String(error);
+          }
+        });
+    }, plugin.settings.hoverDelay);
+  }
+
+  plugin.registerDomEvent(window, "mouseup", handleSelection);
+  plugin.registerDomEvent(window, "selectionchange", handleSelection);
+
+  plugin.registerDomEvent(window, "keydown", (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      cleanupTooltip();
+    }
+  });
+}

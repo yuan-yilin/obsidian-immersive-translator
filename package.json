@@ -1,6 +1,6 @@
 {
   "name": "obsidian-immersive-translator",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Translate selections, documents, and sidebar text in Obsidian using local Claude CLI.",
   "main": "main.js",
   "scripts": {

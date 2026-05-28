@@ -136,3 +136,21 @@
   padding: 8px 10px;
   white-space: pre-wrap;
 }
+
+.translator-reading-tooltip {
+  position: fixed;
+  z-index: 9999;
+  max-width: 320px;
+  padding: 8px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary-alt);
+  color: var(--text-normal);
+  font-size: var(--font-text-size);
+  line-height: var(--line-height-normal);
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: var(--shadow-s);
+  pointer-events: auto;
+  cursor: default;
+}

@@ -22,38 +22,76 @@ export async function translateSelection(plugin: ImmersiveTranslatorPlugin, edit
   }
 }
 
-export async function translateFullDocument(plugin: ImmersiveTranslatorPlugin, editor: Editor): Promise<void> {
-  const content = editor.getValue();
+/**
+ * Resolve the document content and file target for full-document translation.
+ * When an editor is available, read from it; otherwise fall back to the active
+ * Markdown TFile and read from the vault.
+ */
+async function resolveFullDocTarget(
+  plugin: ImmersiveTranslatorPlugin,
+  editor: Editor | undefined,
+): Promise<{ content: string; file: TFile | null; kind: "editor" | "file"; editor?: Editor }> {
+  const activeFile = plugin.app.workspace.getActiveFile();
+
+  if (editor) {
+    const content = editor.getValue();
+    if (!content.trim()) {
+      throw new Error("文档为空，无法翻译");
+    }
+    return { content, file: activeFile, kind: "editor", editor };
+  }
+
+  if (!activeFile || activeFile.extension !== "md") {
+    throw new Error("当前未打开有效的 Markdown 文件");
+  }
+
+  const content = await plugin.app.vault.cachedRead(activeFile);
   if (!content.trim()) {
-    new Notice("文档为空，无法翻译");
+    throw new Error("文档为空，无法翻译");
+  }
+
+  return { content, file: activeFile, kind: "file" };
+}
+
+export async function translateFullDocument(plugin: ImmersiveTranslatorPlugin, editor?: Editor): Promise<void> {
+  let target: Awaited<ReturnType<typeof resolveFullDocTarget>>;
+  try {
+    target = await resolveFullDocTarget(plugin, editor);
+  } catch (error) {
+    new Notice(error instanceof Error ? error.message : String(error), 6000);
     return;
   }
 
   if (plugin.settings.fullDocumentMode === "replace") {
-    await translateFullDocReplace(plugin, editor, content);
+    await translateFullDocReplace(plugin, target);
     return;
   }
 
   if (plugin.settings.fullDocumentMode === "new-file") {
-    await translateFullDocNewFile(plugin, editor, content, plugin.app.workspace.getActiveFile());
+    await translateFullDocNewFile(plugin, target);
     return;
   }
 
-  new FullDocTranslateModal(plugin, editor, content).open();
+  new FullDocTranslateModal(plugin, target).open();
 }
 
 async function translateFullDocReplace(
   plugin: ImmersiveTranslatorPlugin,
-  editor: Editor,
-  content: string,
+  target: { content: string; file: TFile | null; kind: "editor" | "file"; editor?: Editor },
 ): Promise<void> {
   const abortController = new AbortController();
   const progress = new TranslationProgressModal(plugin.app, abortController);
   progress.open();
 
   try {
-    const result = await translateFullContent(plugin, content, abortController, progress);
-    editor.setValue(result);
+    const result = await translateFullContent(plugin, target.content, abortController, progress);
+
+    if (target.kind === "editor" && target.editor) {
+      target.editor.setValue(result);
+    } else if (target.file) {
+      await plugin.app.vault.modify(target.file, result);
+    }
+
     progress.close();
     new Notice("全文翻译完成");
   } catch (error) {
@@ -64,17 +102,15 @@ async function translateFullDocReplace(
 
 async function translateFullDocNewFile(
   plugin: ImmersiveTranslatorPlugin,
-  editor: Editor,
-  content: string,
-  currentFile: TFile | null,
+  target: { content: string; file: TFile | null; kind: "editor" | "file"; editor?: Editor },
 ): Promise<void> {
   const abortController = new AbortController();
   const progress = new TranslationProgressModal(plugin.app, abortController);
   progress.open();
 
   try {
-    const result = await translateFullContent(plugin, content, abortController, progress);
-    const finalPath = await createTranslatedFile(plugin, currentFile, result);
+    const result = await translateFullContent(plugin, target.content, abortController, progress);
+    const finalPath = await createTranslatedFile(plugin, target.file, result);
     progress.close();
     new Notice(`翻译完成，已保存为: ${finalPath.split("/").pop()}`);
 
@@ -192,11 +228,17 @@ class TranslationResultModal extends Modal {
   }
 }
 
+type FullDocTarget = {
+  content: string;
+  file: TFile | null;
+  kind: "editor" | "file";
+  editor?: Editor;
+};
+
 class FullDocTranslateModal extends Modal {
   constructor(
     private plugin: ImmersiveTranslatorPlugin,
-    private editor: Editor,
-    private content: string,
+    private target: FullDocTarget,
   ) {
     super(plugin.app);
   }
@@ -210,17 +252,17 @@ class FullDocTranslateModal extends Modal {
     });
     contentEl.createEl("p", {
       cls: "translator-fdl-warning",
-      text: `将翻译约 ${this.content.length} 个字符，可能需要一些时间。`,
+      text: `将翻译约 ${this.target.content.length} 个字符，可能需要一些时间。`,
     });
 
     const btnRow = contentEl.createDiv({ cls: "translator-fdl-buttons" });
     btnRow.createEl("button", { text: "替换原文" }).addEventListener("click", async () => {
       this.close();
-      await translateFullDocReplace(this.plugin, this.editor, this.content);
+      await translateFullDocReplace(this.plugin, this.target);
     });
     btnRow.createEl("button", { text: "创建新文件" }).addEventListener("click", async () => {
       this.close();
-      await translateFullDocNewFile(this.plugin, this.editor, this.content, this.plugin.app.workspace.getActiveFile());
+      await translateFullDocNewFile(this.plugin, this.target);
     });
     btnRow.createEl("button", { text: "取消" }).addEventListener("click", () => this.close());
   }
@@ -272,20 +314,20 @@ export function registerCommands(plugin: ImmersiveTranslatorPlugin): void {
     id: "translate-full-document",
     name: "翻译全文",
     icon: "book-open",
-    editorCallback: (editor) => translateFullDocument(plugin, editor),
+    callback: async () => {
+      const editor = plugin.getActiveMarkdownEditor();
+      await translateFullDocument(plugin, editor ?? undefined);
+    },
   });
 
   plugin.addCommand({
     id: "translate-full-doc-replace",
     name: "翻译全文（替换原文）",
     icon: "pencil",
-    editorCallback: async (editor) => {
-      const content = editor.getValue();
-      if (!content.trim()) {
-        new Notice("文档为空，无法翻译");
-        return;
-      }
-      await translateFullDocReplace(plugin, editor, content);
+    callback: async () => {
+      const editor = plugin.getActiveMarkdownEditor();
+      const target = await resolveFullDocTarget(plugin, editor ?? undefined);
+      await translateFullDocReplace(plugin, target);
     },
   });
 
@@ -293,13 +335,10 @@ export function registerCommands(plugin: ImmersiveTranslatorPlugin): void {
     id: "translate-full-doc-new-file",
     name: "翻译全文（创建新文件）",
     icon: "file-plus",
-    editorCallback: async (editor) => {
-      const content = editor.getValue();
-      if (!content.trim()) {
-        new Notice("文档为空，无法翻译");
-        return;
-      }
-      await translateFullDocNewFile(plugin, editor, content, plugin.app.workspace.getActiveFile());
+    callback: async () => {
+      const editor = plugin.getActiveMarkdownEditor();
+      const target = await resolveFullDocTarget(plugin, editor ?? undefined);
+      await translateFullDocNewFile(plugin, target);
     },
   });
 
