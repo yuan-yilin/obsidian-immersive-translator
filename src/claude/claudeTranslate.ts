@@ -3,6 +3,20 @@ import { getEnhancedPath, getMissingNodeError } from "../utils/env";
 import type { TranslateOptions, TranslatorConfig } from "../translation/translator";
 import { buildClaudeCommand } from "./customSpawn";
 
+/**
+ * Strip leading ```markdown / ``` and trailing ``` that Claude CLI
+ * sometimes wraps around its output, even when told not to.
+ * Only strips when the entire response is a single fenced block.
+ */
+function stripMarkdownFenceWrapper(text: string): string {
+  const trimmed = text.trim();
+  const fenceMatch = trimmed.match(/^```(?:markdown)?\s*\n([\s\S]*)\n```\s*$/);
+  if (fenceMatch) {
+    return fenceMatch[1];
+  }
+  return trimmed;
+}
+
 export async function runClaudeTranslation(
   config: TranslatorConfig & { claudePath: string; vaultPath: string },
   prompt: string,
@@ -76,7 +90,7 @@ export async function runClaudeTranslation(
         return;
       }
 
-      const trimmed = stdout.trim();
+      const trimmed = stripMarkdownFenceWrapper(stdout);
       if (!trimmed) {
         rejectOnce(new Error("Claude CLI returned an empty translation."));
         return;

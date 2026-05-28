@@ -14,7 +14,8 @@ Rules:
 4. Preserve headings, lists, task list markers, tables, blockquotes, callout syntax, footnotes, whitespace, and line breaks as much as possible.
 5. Keep technical terms accurate and widely accepted.
 6. If the text is already in the target language or has no translatable prose, return it unchanged.
-7. Output only the translated text. Do not add explanations, notes, quotes, or Markdown fences.`;
+7. Output only the translated text. Do not add explanations, notes, quotes, or Markdown fences.
+8. Do NOT wrap the entire response in any code fence.`;
 }
 
 export function buildTranslationPrompt(text: string): string {
@@ -47,21 +48,23 @@ Compare these structural elements between original and translated:
 Rules:
 - If the structures match perfectly, return the translated text unchanged.
 - If there are structural differences, fix the translated text to match the original structure while keeping all translated content intact.
-- Output ONLY the final corrected translated text. No explanations, no notes.`;
+- Output ONLY the final corrected translated text. No explanations, no notes, no code fence wrappers.`;
 }
 
 export function buildValidationPrompt(original: string, translated: string): string {
+  const fenceOpen = "```";
+  const fenceClose = "```";
   return `Validate and fix the markdown structure.
 
 ORIGINAL:
-\`\`\`markdown
+${fenceOpen}markdown
 ${original}
-\`\`\`
+${fenceClose}
 
 TRANSLATED:
-\`\`\`markdown
+${fenceOpen}markdown
 ${translated}
-\`\`\`
+${fenceClose}
 
 Compare the structures. If they differ, fix the TRANSLATED version to match ORIGINAL structure. Return ONLY the corrected translated text.`;
 }

@@ -5,6 +5,10 @@
 ### Features
 - 全文翻译后自动校验 Markdown 格式结构（标题、代码块、表格、引用、YAML frontmatter 等），发现不一致时尝试自动修复并提示用户
 
+### Fixes
+- 自动剥离 Claude CLI 可能包裹在译文外层的 ```markdown ``` 代码块，确保写入文件的纯 Markdown 内容与原文格式一致
+- 翻译系统 prompt 中新增明确禁止包裹代码块的规则
+
 ## 1.0.7
 
 ### Fixes
